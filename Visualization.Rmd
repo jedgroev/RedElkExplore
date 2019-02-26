@@ -1,0 +1,89 @@
+---
+title: "Visual"
+author: "Steffen"
+date: "15 February 2019"
+output: html_document
+---
+### Visualization options
+```{r, echo=FALSE, cache=FALSE, message=FALSE, warning=FALSE}
+#LIBRARIES
+rm(list=ls())
+library(rgdal)
+library(rgeos)
+library(plyr)
+library(lubridate)
+library(dplyr)
+library(adehabitatLT)
+library(SyncMove)
+library(leaflet)
+library(splancs)
+library(sf)
+library(mapview)
+
+setwd("C:/PhD/ANALYSIS/data/GYE/CH1/20180114_FINALDATA/")
+csvfiles<-list.files(pattern='FINAL_[A-Z].*csv')
+
+mcp_IND_l <- list(data.frame())
+mcp_POP_l <- list(data.frame())
+for (kk in 1:length(csvfiles)){
+  dat <- read.csv(file=csvfiles[kk])
+ 
+
+POP <- dat[, c("x", "y")]
+coordinates(POP) <- ~x+y
+proj4string(POP)<-sp::CRS('+init=epsg:32612')
+#POP <- spTransform(POP, sp::CRS("+init=epsg:32612"))
+#plot(BF_POP)
+
+IND <- dat[, c("aid", "x", "y")]
+coordinates(IND) <- ~x+y
+proj4string(IND)<-sp::CRS('+init=epsg:32612')
+#IND <- spTransform(POP, CRS("+init=epsg:32612"))
+
+#plot(BF_IND)
+
+# calculate MCPs using adehabitat package
+
+mcp_IND <- adehabitatHR::mcp(IND, percent = 100, unin = c("m"), unout = c("km2"))
+mcp_POP <- adehabitatHR::mcp(POP, percent = 100, unin = c("m"), unout = c("km2"))
+
+#calculate RMI per individual CODY
+mcp_IND$AreaPOP <- mcp_POP$area # sum area of occupied by population
+mcp_IND$RatioIND <-  mcp_IND$area / mcp_IND$AreaPOP * 100 # calc % of occupancy by individuals of population range
+mcp_IND$study_area <- unique(dat$study)
+mcp_IND_l[[kk]] <- st_as_sf(mcp_IND)
+mcp_POP_l[[kk]] <- st_as_sf(mcp_POP)
+
+}
+
+
+# visualize: leaflet option
+mcp_ind <- as(do.call(rbind.data.frame, mcp_IND_l),'Spatial')
+mcp_pop <- as(do.call(rbind.data.frame, mcp_POP_l),'Spatial')
+
+mcp_IND_WGS <- spTransform(mcp_ind, CRS("+init=epsg:4326"))
+mcp_POP_WGS <- spTransform(mcp_pop, CRS("+init=epsg:4326"))
+#plot(mcp_IND_WGS, col= mcp_IND_WGS@data$study_area)
+#plot(mcp_POP_WGS, add=TRUE, lwd=4)
+
+# plot the map
+mapMCP <- leaflet(mcp_IND_WGS)  %>%
+  addProviderTiles(providers$Esri.WorldImagery) %>%
+ # setView(bbox(mcp_IND_WGS), 49.0, zoom = 11) %>%
+  addPolygons(data = mcp_IND_WGS, color = "steelblue", fill = "steelblue", popup="MCP_IND") %>%
+  addPolygons(data = mcp_POP_WGS, color = "orange", fill = "orange", popup="MCP_POP")# %>%
+# addMarkers(BF_POP@coords[,1], BF_POP@coords[,2]) #%>% 
+# addMarkers(CY@coords[,1], CY@coords[,2])
+mapMCP
+
+# mcp_IND_WGS <- st_as_sf(mcp_IND_WGS)
+# mapview(mcp_POP_WGS) + mapview(mcp_IND_WGS, burst=T, addHomeButton=TRUE)
+
+mapviewOptions(basemaps = "Esri.WorldImagery",
+               layers.control.pos = "topright")
+mapview(mcp_POP_WGS) + mapview(mcp_IND_WGS, burst=T, addHomeButton=TRUE, legend=FALSE)
+
+#mapview(breweries91, zcol = "founded", legend = TRUE)
+
+
+```
